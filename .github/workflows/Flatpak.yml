@@ -1,0 +1,65 @@
+name: Build Flatpak
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., 2.3.0)'
+        required: true
+        default: '2.3.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+
+    steps:
+      - name: Checkout OpenROM
+        uses: actions/checkout@v4
+
+      - name: Checkout flatpak-builder-tools
+        uses: actions/checkout@v4
+        with:
+          repository: flatpak/flatpak-builder-tools
+          path: flatpak-builder-tools
+
+      - name: Generate Python deps sources
+        run: |
+          pip install requirements-parser aiohttp
+          python3 flatpak-builder-tools/pip/flatpak-pip-generator.py \
+            --runtime org.freedesktop.Sdk//24.08 \
+            --output flatpak/python-deps \
+            customtkinter \
+            darkdetect \
+            Pillow \
+            packaging \
+            psutil \
+            send2trash \
+            tkinterdnd2
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: OpenROM-v${{ github.event.inputs.version }}.flatpak
+          manifest-path: flatpak/io.github.M5Devs.OpenROM.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: OpenROM v${{ github.event.inputs.version }}
+          files: OpenROM-v${{ github.event.inputs.version }}.flatpak
+          body: |
+            ### Linux Flatpak
+            ```bash
+            flatpak install OpenROM-v${{ github.event.inputs.version }}.flatpak
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
