@@ -24,47 +24,50 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Extract chdman ARM64
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - name: Get chdman ARM64
         run: |
           npm install @emmercm/chdman-win32-arm64
           mkdir -p assets/windows/arm64
           cp node_modules/@emmercm/chdman-win32-arm64/chdman.exe assets/windows/arm64/chdman.exe
 
-      - name: Build ecm/unecm Windows ARM64
-  run: |
-    git clone https://github.com/KingDuckZ/ecm
-    cd ecm
-    cl.exe /O2 ecm.c /Fe:ecm.exe
-    cl.exe /O2 unecm.c /Fe:unecm.exe
-    cp ecm.exe ../assets/windows/arm64/ecm.exe
-    cp unecm.exe ../assets/windows/arm64/unecm.exe
-
-      - name: Extract maxcso ARM64
+      - name: Build ecm/unecm ARM64
         run: |
-          # maxcso مش عنده ARM binary جاهز — نبنيه
-          # بنستخدم MSVC cross-compile
-          choco install cmake -y
+          git clone https://github.com/KingDuckZ/ecm
+          cd ecm
+          cl.exe /O2 /Fe:ecm.exe ecm.c
+          cl.exe /O2 /Fe:unecm.exe unecm.c
+          cp ecm.exe ../assets/windows/arm64/ecm.exe
+          cp unecm.exe ../assets/windows/arm64/unecm.exe
+
+      - name: Build maxcso ARM64
+        run: |
           git clone https://github.com/unknownbrackets/maxcso
           cd maxcso
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -A ARM64
           cmake --build build --config Release
           cp build/Release/maxcso.exe ../assets/windows/arm64/maxcso.exe
 
-      - name: Extract nodtool ARM64
-        run: |
-          npm install nodtool
-          mkdir -p assets/windows/arm64
-          # أو نبنيه من source
-          cargo install nodtool
-          cp $env:USERPROFILE\.cargo\bin\nodtool.exe assets/windows/arm64/nodtool.exe
-
-      - name: Get extract-xiso ARM64
+      - name: Build extract-xiso ARM64
         run: |
           git clone https://github.com/XboxDev/extract-xiso
           cd extract-xiso
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -A ARM64
           cmake --build build --config Release
           cp build/Release/extract-xiso.exe ../assets/windows/arm64/extract-xiso.exe
+
+      - name: Build nodtool ARM64
+        run: |
+          cargo install --locked nodtool --target aarch64-pc-windows-msvc
+          cp $env:USERPROFILE\.cargo\bin\nodtool.exe assets/windows/arm64/nodtool.exe
+
+      - name: Verify binaries
+        run: |
+          ls -la assets/windows/arm64/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,7 +86,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -q \
             build-essential cmake git \
-            libuv1-dev zlib1g-dev liblzma-dev
+            zlib1g-dev liblzma-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -100,6 +103,17 @@ jobs:
           cp node_modules/@emmercm/chdman-linux-arm64/chdman assets/linux/arm64/chdman
           chmod +x assets/linux/arm64/chdman
 
+      - name: Build ecm/unecm ARM64
+        run: |
+          git clone https://github.com/KingDuckZ/ecm
+          cd ecm
+          gcc -O2 -o ecm ecm.c
+          gcc -O2 -o unecm unecm.c
+          cp ecm ../assets/linux/arm64/ecm
+          cp unecm ../assets/linux/arm64/unecm
+          chmod +x ../assets/linux/arm64/ecm
+          chmod +x ../assets/linux/arm64/unecm
+
       - name: Build maxcso ARM64
         run: |
           git clone https://github.com/unknownbrackets/maxcso
@@ -107,16 +121,6 @@ jobs:
           make
           cp maxcso ../assets/linux/arm64/maxcso
           chmod +x ../assets/linux/arm64/maxcso
-
-      - name: Build ecm/unecm ARM64
-        run: |
-          git clone https://github.com/alucryd/ecm-tools
-          cd ecm-tools
-          make
-          cp ecm ../assets/linux/arm64/ecm
-          cp unecm ../assets/linux/arm64/unecm
-          chmod +x ../assets/linux/arm64/ecm
-          chmod +x ../assets/linux/arm64/unecm
 
       - name: Build extract-xiso ARM64
         run: |
@@ -132,6 +136,11 @@ jobs:
           cargo install --locked nodtool
           cp ~/.cargo/bin/nodtool assets/linux/arm64/nodtool
           chmod +x assets/linux/arm64/nodtool
+
+      - name: Verify binaries
+        run: |
+          ls -la assets/linux/arm64/
+          file assets/linux/arm64/*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -163,12 +172,22 @@ jobs:
           body: |
             Pre-built ARM64 binaries for OpenROM.
 
-            | Platform | File |
-            |----------|------|
-            | Windows ARM64 | `windows-arm64-binaries.zip` |
-            | Linux ARM64 | `linux-arm64-binaries.zip` |
+            ## Contents
 
-            Extract and place in `assets/windows/arm64/` and `assets/linux/arm64/`
+            | Binary | Windows ARM64 | Linux ARM64 |
+            |--------|--------------|-------------|
+            | chdman | ✅ npm @emmercm | ✅ npm @emmercm |
+            | ecm | ✅ built from source | ✅ built from source |
+            | unecm | ✅ built from source | ✅ built from source |
+            | maxcso | ✅ built from source | ✅ built from source |
+            | extract-xiso | ✅ built from source | ✅ built from source |
+            | nodtool | ✅ cargo build | ✅ cargo build |
+
+            ## Installation
+
+            Extract and place in:
+            - `assets/windows/arm64/` for Windows ARM64
+            - `assets/linux/arm64/` for Linux ARM64
           files: |
             release/windows-arm64-binaries.zip
             release/linux-arm64-binaries.zip
