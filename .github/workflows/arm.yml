@@ -32,8 +32,11 @@ jobs:
       - name: Get chdman ARM64
         run: |
           npm install @emmercm/chdman-win32-arm64
-          mkdir -p assets/windows/arm64
-          cp node_modules/@emmercm/chdman-win32-arm64/chdman.exe assets/windows/arm64/chdman.exe
+          New-Item -ItemType Directory -Force -Path assets/windows/arm64
+          # Find the binary anywhere in the package
+          $chdman = Get-ChildItem -Recurse -Path node_modules/@emmercm/chdman-win32-arm64 -Filter "chdman.exe" | Select-Object -First 1
+          Write-Host "Found chdman at: $($chdman.FullName)"
+          Copy-Item $chdman.FullName assets/windows/arm64/chdman.exe
 
       - name: Build ecm/unecm ARM64
         run: |
@@ -41,8 +44,8 @@ jobs:
           cd ecm
           cl.exe /O2 /Fe:ecm.exe ecm.c
           cl.exe /O2 /Fe:unecm.exe unecm.c
-          cp ecm.exe ../assets/windows/arm64/ecm.exe
-          cp unecm.exe ../assets/windows/arm64/unecm.exe
+          Copy-Item ecm.exe ../assets/windows/arm64/ecm.exe
+          Copy-Item unecm.exe ../assets/windows/arm64/unecm.exe
 
       - name: Build maxcso ARM64
         run: |
@@ -50,7 +53,7 @@ jobs:
           cd maxcso
           cmake -B build -DCMAKE_BUILD_TYPE=Release -A ARM64
           cmake --build build --config Release
-          cp build/Release/maxcso.exe ../assets/windows/arm64/maxcso.exe
+          Copy-Item build/Release/maxcso.exe ../assets/windows/arm64/maxcso.exe
 
       - name: Build extract-xiso ARM64
         run: |
@@ -58,16 +61,15 @@ jobs:
           cd extract-xiso
           cmake -B build -DCMAKE_BUILD_TYPE=Release -A ARM64
           cmake --build build --config Release
-          cp build/Release/extract-xiso.exe ../assets/windows/arm64/extract-xiso.exe
+          Copy-Item build/Release/extract-xiso.exe ../assets/windows/arm64/extract-xiso.exe
 
       - name: Build nodtool ARM64
         run: |
           cargo install --locked nodtool --target aarch64-pc-windows-msvc
-          cp $env:USERPROFILE\.cargo\bin\nodtool.exe assets/windows/arm64/nodtool.exe
+          Copy-Item "$env:USERPROFILE\.cargo\bin\nodtool.exe" assets/windows/arm64/nodtool.exe
 
-      - name: Verify binaries
-        run: |
-          ls -la assets/windows/arm64/
+      - name: Verify
+        run: Get-ChildItem assets/windows/arm64/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -100,7 +102,10 @@ jobs:
         run: |
           npm install @emmercm/chdman-linux-arm64
           mkdir -p assets/linux/arm64
-          cp node_modules/@emmercm/chdman-linux-arm64/chdman assets/linux/arm64/chdman
+          # Find binary anywhere in package
+          CHDMAN=$(find node_modules/@emmercm/chdman-linux-arm64 -name "chdman" -type f | head -1)
+          echo "Found chdman at: $CHDMAN"
+          cp "$CHDMAN" assets/linux/arm64/chdman
           chmod +x assets/linux/arm64/chdman
 
       - name: Build ecm/unecm ARM64
@@ -137,7 +142,7 @@ jobs:
           cp ~/.cargo/bin/nodtool assets/linux/arm64/nodtool
           chmod +x assets/linux/arm64/nodtool
 
-      - name: Verify binaries
+      - name: Verify
         run: |
           ls -la assets/linux/arm64/
           file assets/linux/arm64/*
@@ -153,7 +158,7 @@ jobs:
     needs: [windows-arm64, linux-arm64]
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
@@ -172,18 +177,13 @@ jobs:
           body: |
             Pre-built ARM64 binaries for OpenROM.
 
-            ## Contents
-
             | Binary | Windows ARM64 | Linux ARM64 |
             |--------|--------------|-------------|
             | chdman | ✅ npm @emmercm | ✅ npm @emmercm |
-            | ecm | ✅ built from source | ✅ built from source |
-            | unecm | ✅ built from source | ✅ built from source |
+            | ecm/unecm | ✅ built from source | ✅ built from source |
             | maxcso | ✅ built from source | ✅ built from source |
             | extract-xiso | ✅ built from source | ✅ built from source |
             | nodtool | ✅ cargo build | ✅ cargo build |
-
-            ## Installation
 
             Extract and place in:
             - `assets/windows/arm64/` for Windows ARM64
