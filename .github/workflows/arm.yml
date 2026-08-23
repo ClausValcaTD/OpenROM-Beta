@@ -1,0 +1,176 @@
+name: Build ARM Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g., arm-1.0.0)'
+        required: true
+        default: 'arm-1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+
+  # ── Windows ARM64 ───────────────────────────────────────────────────────────
+  windows-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Extract chdman ARM64
+        run: |
+          npm install @emmercm/chdman-win32-arm64
+          mkdir -p assets/windows/arm64
+          cp node_modules/@emmercm/chdman-win32-arm64/chdman.exe assets/windows/arm64/chdman.exe
+
+      - name: Build ecm/unecm Windows ARM64
+  run: |
+    git clone https://github.com/KingDuckZ/ecm
+    cd ecm
+    cl.exe /O2 ecm.c /Fe:ecm.exe
+    cl.exe /O2 unecm.c /Fe:unecm.exe
+    cp ecm.exe ../assets/windows/arm64/ecm.exe
+    cp unecm.exe ../assets/windows/arm64/unecm.exe
+
+      - name: Extract maxcso ARM64
+        run: |
+          # maxcso مش عنده ARM binary جاهز — نبنيه
+          # بنستخدم MSVC cross-compile
+          choco install cmake -y
+          git clone https://github.com/unknownbrackets/maxcso
+          cd maxcso
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          cp build/Release/maxcso.exe ../assets/windows/arm64/maxcso.exe
+
+      - name: Extract nodtool ARM64
+        run: |
+          npm install nodtool
+          mkdir -p assets/windows/arm64
+          # أو نبنيه من source
+          cargo install nodtool
+          cp $env:USERPROFILE\.cargo\bin\nodtool.exe assets/windows/arm64/nodtool.exe
+
+      - name: Get extract-xiso ARM64
+        run: |
+          git clone https://github.com/XboxDev/extract-xiso
+          cd extract-xiso
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          cp build/Release/extract-xiso.exe ../assets/windows/arm64/extract-xiso.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64
+          path: assets/windows/arm64/
+
+  # ── Linux ARM64 ────────────────────────────────────────────────────────────
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -q \
+            build-essential cmake git \
+            libuv1-dev zlib1g-dev liblzma-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get chdman ARM64
+        run: |
+          npm install @emmercm/chdman-linux-arm64
+          mkdir -p assets/linux/arm64
+          cp node_modules/@emmercm/chdman-linux-arm64/chdman assets/linux/arm64/chdman
+          chmod +x assets/linux/arm64/chdman
+
+      - name: Build maxcso ARM64
+        run: |
+          git clone https://github.com/unknownbrackets/maxcso
+          cd maxcso
+          make
+          cp maxcso ../assets/linux/arm64/maxcso
+          chmod +x ../assets/linux/arm64/maxcso
+
+      - name: Build ecm/unecm ARM64
+        run: |
+          git clone https://github.com/alucryd/ecm-tools
+          cd ecm-tools
+          make
+          cp ecm ../assets/linux/arm64/ecm
+          cp unecm ../assets/linux/arm64/unecm
+          chmod +x ../assets/linux/arm64/ecm
+          chmod +x ../assets/linux/arm64/unecm
+
+      - name: Build extract-xiso ARM64
+        run: |
+          git clone https://github.com/XboxDev/extract-xiso
+          cd extract-xiso
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cp build/extract-xiso ../assets/linux/arm64/extract-xiso
+          chmod +x ../assets/linux/arm64/extract-xiso
+
+      - name: Build nodtool ARM64
+        run: |
+          cargo install --locked nodtool
+          cp ~/.cargo/bin/nodtool assets/linux/arm64/nodtool
+          chmod +x assets/linux/arm64/nodtool
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: assets/linux/arm64/
+
+  # ── Release ────────────────────────────────────────────────────────────────
+  release:
+    needs: [windows-arm64, linux-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Package
+        run: |
+          mkdir -p release
+          cd artifacts/windows-arm64 && zip -r ../../release/windows-arm64-binaries.zip . && cd ../..
+          cd artifacts/linux-arm64   && zip -r ../../release/linux-arm64-binaries.zip .   && cd ../..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: ARM Binaries ${{ github.event.inputs.version }}
+          body: |
+            Pre-built ARM64 binaries for OpenROM.
+
+            | Platform | File |
+            |----------|------|
+            | Windows ARM64 | `windows-arm64-binaries.zip` |
+            | Linux ARM64 | `linux-arm64-binaries.zip` |
+
+            Extract and place in `assets/windows/arm64/` and `assets/linux/arm64/`
+          files: |
+            release/windows-arm64-binaries.zip
+            release/linux-arm64-binaries.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
