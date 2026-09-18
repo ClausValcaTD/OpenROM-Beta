@@ -46,3 +46,70 @@ jobs:
           name: arm64-binaries
           path: arm64-binaries/
           retention-days: 7
+name: Collect ARM64 Binaries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collect-arm64-binaries:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xdelta3 gcc make git
+          echo "✅ apt install done"
+
+      - name: Build ecm / unecm from source
+        run: |
+          git clone https://github.com/kidoz/ecm ecm_src
+          echo '#define ECM_VERSION "2.0.0"' > ecm_src/include/version.h
+
+          gcc -O2 -x c -Dnullptr=NULL -Wno-incompatible-pointer-types \
+              -o ecm \
+              ecm_src/src/ecm.c ecm_src/src/eccedc.c \
+              -I ecm_src/include -lm
+
+          gcc -O2 -x c -Dnullptr=NULL -Wno-incompatible-pointer-types \
+              -o unecm \
+              ecm_src/src/unecm.c ecm_src/src/eccedc.c \
+              -I ecm_src/include -lm
+
+          echo "✅ ecm/unecm built"
+
+      - name: Verify binaries
+        run: |
+          echo "--- xdelta3 ---"
+          which xdelta3 && xdelta3 --version || echo "❌ not found"
+
+          echo "--- ecm ---"
+          file ./ecm
+          ./ecm 2>&1 | head -2 || true
+
+          echo "--- unecm ---"
+          file ./unecm
+          ./unecm 2>&1 | head -2 || true
+
+      - name: Collect binaries
+        run: |
+          mkdir -p arm64-binaries
+          cp $(which xdelta3) arm64-binaries/xdelta3
+          cp ./ecm            arm64-binaries/ecm
+          cp ./unecm          arm64-binaries/unecm
+          chmod +x arm64-binaries/*
+
+          echo ""
+          echo "--- file info ---"
+          file arm64-binaries/*
+          echo ""
+          echo "--- sizes ---"
+          ls -lh arm64-binaries/
+
+      - name: Upload binaries as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-binaries
+          path: arm64-binaries/
+          retention-days: 7
