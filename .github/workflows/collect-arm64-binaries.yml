@@ -1,0 +1,48 @@
+name: Collect ARM64 Binaries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collect-arm64-binaries:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Install tools from apt
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xdelta3 ecm
+          echo "✅ apt install done"
+
+      - name: Verify binaries exist
+        run: |
+          echo "--- xdelta3 ---"
+          which xdelta3 && xdelta3 --version || echo "❌ xdelta3 not found"
+
+          echo "--- ecm ---"
+          which ecm && ecm 2>&1 | head -3 || echo "❌ ecm not found"
+
+          echo "--- unecm ---"
+          which unecm && unecm 2>&1 | head -3 || echo "❌ unecm not found"
+
+      - name: Collect binaries
+        run: |
+          mkdir -p arm64-binaries
+          cp $(which xdelta3) arm64-binaries/xdelta3
+          cp $(which ecm)     arm64-binaries/ecm
+          cp $(which unecm)   arm64-binaries/unecm
+          chmod +x arm64-binaries/*
+
+          echo ""
+          echo "--- Binary info ---"
+          file arm64-binaries/*
+          echo ""
+          echo "--- Sizes ---"
+          ls -lh arm64-binaries/
+
+      - name: Upload binaries as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-binaries
+          path: arm64-binaries/
+          retention-days: 7
